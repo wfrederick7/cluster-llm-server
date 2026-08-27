@@ -1,3 +1,5 @@
-# GPT-OSS compatibility build from OpenAI's archived vLLM recipe.
-# setup_env.sh supplies the required vLLM and PyTorch package indexes.
-vllm==0.10.1+gptoss
+# First stable vLLM release with documented GPT-OSS support.
+vllm==0.10.2
+
+# Avoid resolving the old vLLM release against the incompatible 5.x series.
+transformers==4.55.2

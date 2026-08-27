@@ -23,9 +23,7 @@ fi
 
 "${PYTHON_BIN}" -m venv "${VENV_DIR}"
 "${VENV_DIR}/bin/python" -m pip install --upgrade pip setuptools wheel
-"${VENV_DIR}/bin/python" -m pip install --pre \
-    --extra-index-url https://wheels.vllm.ai/gpt-oss/ \
-    --extra-index-url https://download.pytorch.org/whl/nightly/cu128 \
+"${VENV_DIR}/bin/python" -m pip install \
     -r "${ROOT_DIR}/requirements.bootstrap.txt"
 
 mkdir -p "${ROOT_DIR}/runtime"

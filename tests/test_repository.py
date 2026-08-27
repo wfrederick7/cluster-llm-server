@@ -47,6 +47,29 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn("SLURM_SUBMIT_DIR", launcher)
         self.assertNotIn('dirname "${BASH_SOURCE[0]}"', launcher)
 
+    def test_bootstrap_uses_stable_release_dependencies(self) -> None:
+        requirements = (ROOT / "requirements.bootstrap.txt").read_text(
+            encoding="utf-8"
+        )
+        setup = (ROOT / "scripts" / "setup_env.sh").read_text(encoding="utf-8")
+        self.assertIn("vllm==0.10.2", requirements)
+        self.assertIn("transformers==4.55.2", requirements)
+        self.assertNotIn("+gptoss", requirements)
+        self.assertNotIn("--pre", setup)
+        self.assertNotIn("wheels.vllm.ai/gpt-oss", setup)
+        self.assertNotIn("download.pytorch.org/whl/nightly", setup)
+
+    def test_single_h100_profile_uses_conservative_memory_settings(self) -> None:
+        profile = (ROOT / "profiles" / "gpt-oss-120b.env").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-1024}"', profile
+        )
+        self.assertIn(
+            'GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.95}"', profile
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

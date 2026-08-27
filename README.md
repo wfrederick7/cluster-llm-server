@@ -47,12 +47,16 @@ cd /path/to/cluster-llm-server
 PYTHON_BIN=/path/to/python3.10 ./scripts/setup_env.sh
 ```
 
-This installs the compatibility build from OpenAI's
-[archived vLLM recipe](https://developers.openai.com/cookbook/articles/gpt-oss/run-vllm)
+This installs the pinned official
+[vLLM release documented to support GPT-OSS](https://docs.vllm.ai/en/v0.10.2/models/supported_models.html)
 and records the resolved packages in the ignored
-`runtime/environment.freeze.txt`. The pin is retained for reproducibility; test
-dependency upgrades on the target GPU before adopting them. The script does not
-modify an existing Conda environment.
+`runtime/environment.freeze.txt`. The script does not modify an existing Conda
+environment.
+
+The single-H100 profile follows the maintained
+[vLLM GPT-OSS recipe](https://github.com/vllm-project/recipes/blob/main/OpenAI/GPT-OSS.md):
+`GPU_MEMORY_UTILIZATION=0.95` and
+`MAX_NUM_BATCHED_TOKENS=1024`.
 
 Before submission, adapt the `#SBATCH` resource directives in
 `slurm/serve.sbatch` to the local cluster, especially the partition, account,
