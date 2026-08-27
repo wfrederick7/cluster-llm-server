@@ -1,0 +1,3 @@
+# GPT-OSS compatibility build from OpenAI's archived vLLM recipe.
+# setup_env.sh supplies the required vLLM and PyTorch package indexes.
+vllm==0.10.1+gptoss
