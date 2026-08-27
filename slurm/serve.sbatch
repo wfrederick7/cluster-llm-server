@@ -11,6 +11,13 @@
 
 set -euo pipefail
 
+unset GCC_EXEC_PREFIX COMPILER_PATH LIBRARY_PATH
+export CC=/usr/bin/gcc
+export CXX=/usr/bin/g++
+
+unset PYTHONPATH
+
+
 SERVER_ROOT="${SERVER_ROOT:-${SLURM_SUBMIT_DIR:-$(pwd)}}"
 SERVER_ROOT="$(cd "${SERVER_ROOT}" && pwd)"
 export SERVER_ROOT
@@ -93,7 +100,7 @@ trap cleanup EXIT TERM INT
     --kv-cache-dtype "${KV_CACHE_DTYPE}" \
     --enable-chunked-prefill \
     --enable-prefix-caching \
-    --disable-log-requests &
+    --enforce-eager &
 SERVER_PID="$!"
 
 ready=0
