@@ -59,16 +59,27 @@ class RepositoryTests(unittest.TestCase):
         self.assertNotIn("wheels.vllm.ai/gpt-oss", setup)
         self.assertNotIn("download.pytorch.org/whl/nightly", setup)
 
-    def test_single_h100_profile_uses_conservative_memory_settings(self) -> None:
+    def test_eight_h100_profile_uses_conservative_batching(self) -> None:
         profile = (ROOT / "profiles" / "gpt-oss-120b.env").read_text(
             encoding="utf-8"
         )
         self.assertIn(
-            'MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-1024}"', profile
+            'TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-8}"', profile
+        )
+        self.assertIn('MAX_NUM_SEQS="${MAX_NUM_SEQS:-8}"', profile)
+        self.assertIn(
+            'MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"', profile
         )
         self.assertIn(
             'GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.95}"', profile
         )
+
+    def test_launcher_requests_and_checks_all_eight_gpus(self) -> None:
+        launcher = (ROOT / "slurm" / "serve.sbatch").read_text(encoding="utf-8")
+        self.assertIn("#SBATCH --gres=gpu:8", launcher)
+        self.assertIn('torch.cuda.device_count()', launcher)
+        self.assertIn("--enforce-eager", launcher)
+        self.assertIn("export CC=/usr/bin/gcc", launcher)
 
 
 if __name__ == "__main__":

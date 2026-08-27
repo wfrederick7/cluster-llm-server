@@ -1,7 +1,7 @@
 # Cluster LLM server
 
 Minimal Slurm deployment for an authenticated, OpenAI-compatible vLLM server.
-The first profile serves `openai/gpt-oss-120b` on one H100 80 GB GPU with a
+The default profile serves `openai/gpt-oss-120b` across eight H100 80 GB GPUs with a
 131,072-token context limit.
 
 The server exposes both `/v1/chat/completions` and `/v1/responses`. It is meant
@@ -13,7 +13,7 @@ must be validated on the target GPU cluster.
 ## Requirements
 
 - Linux x86-64 Slurm cluster
-- One H100 GPU with at least 80 GB VRAM
+- One node with eight H100 GPUs with at least 80 GB VRAM each
 - Python 3.10-3.12 with `venv` support
 - A shared cache location with at least 150 GB free
 - Network access to the Python package indexes and Hugging Face, or equivalent
@@ -53,10 +53,10 @@ and records the resolved packages in the ignored
 `runtime/environment.freeze.txt`. The script does not modify an existing Conda
 environment.
 
-The single-H100 profile follows the maintained
-[vLLM GPT-OSS recipe](https://github.com/vllm-project/recipes/blob/main/OpenAI/GPT-OSS.md):
-`GPU_MEMORY_UTILIZATION=0.95` and
-`MAX_NUM_BATCHED_TOKENS=1024`.
+The profile uses tensor parallelism across all eight GPUs, initially allowing
+eight concurrent sequences and 4,096 batched tokens. These values can be
+overridden at submission time and should be benchmarked against the target
+workload before increasing them.
 
 Before submission, adapt the `#SBATCH` resource directives in
 `slurm/serve.sbatch` to the local cluster, especially the partition, account,
@@ -124,13 +124,13 @@ python scripts/verify_server.py \
   --timeout 3600
 ```
 
-If startup or this request fails for insufficient memory, keep the failure
-visible. Do not silently enable FP8 KV cache or tensor parallelism.
+If startup or this request fails, keep the failure visible. Do not silently
+enable FP8 KV cache or reduce the requested context length.
 
 ## Boundaries
 
 - No model weights, prompts, responses, secrets, logs, or runtime artifacts are
   committed.
 - No fixed compute node, personal path, or default credential is stored.
-- The first deployment is one replica on one H100. Multi-replica serving and
-  TensorRT-LLM are deferred until correctness is established.
+- The deployment is one tensor-parallel replica across eight H100s.
+  Multi-replica serving and TensorRT-LLM remain deferred.

@@ -2,7 +2,7 @@
 #SBATCH --job-name=gpt-oss-120b
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:8
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=128G
 #SBATCH --time=7-00:00:00
@@ -11,12 +11,12 @@
 
 set -euo pipefail
 
+# Triton must use the compute-node system toolchain rather than compiler paths
+# inherited from the login-node module environment.
 unset GCC_EXEC_PREFIX COMPILER_PATH LIBRARY_PATH
 export CC=/usr/bin/gcc
 export CXX=/usr/bin/g++
-
 unset PYTHONPATH
-
 
 SERVER_ROOT="${SERVER_ROOT:-${SLURM_SUBMIT_DIR:-$(pwd)}}"
 SERVER_ROOT="$(cd "${SERVER_ROOT}" && pwd)"
@@ -61,15 +61,24 @@ nvidia-smi --query-gpu=name,memory.total,driver_version \
     --format=csv,noheader
 
 "${VENV_DIR}/bin/python" - <<'PY'
+import os
+
 import torch
 
 if not torch.cuda.is_available():
     raise SystemExit("PyTorch cannot access CUDA")
-name = torch.cuda.get_device_name(0)
-memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-if "H100" not in name or memory_gb < 75:
-    raise SystemExit(f"Expected an H100 80 GB GPU; found {name} ({memory_gb:.1f} GB)")
-print(f"CUDA preflight passed: {name} ({memory_gb:.1f} GB)")
+expected = int(os.environ["TENSOR_PARALLEL_SIZE"])
+visible = torch.cuda.device_count()
+if visible != expected:
+    raise SystemExit(f"Expected {expected} visible GPUs; found {visible}")
+for index in range(visible):
+    name = torch.cuda.get_device_name(index)
+    memory_gb = torch.cuda.get_device_properties(index).total_memory / (1024**3)
+    if "H100" not in name or memory_gb < 75:
+        raise SystemExit(
+            f"Expected H100 80 GB at index {index}; found {name} ({memory_gb:.1f} GB)"
+        )
+print(f"CUDA preflight passed: {visible} H100 80 GB GPUs")
 PY
 
 "${VENV_DIR}/bin/python" "${SERVER_ROOT}/scripts/prefetch_model.py" \
@@ -155,7 +164,7 @@ manifest = {
     "vllm": importlib.metadata.version("vllm"),
     "torch": torch.__version__,
     "cuda_runtime": torch.version.cuda,
-    "gpu": torch.cuda.get_device_name(0),
+    "gpus": [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())],
 }
 path = (
     Path(os.environ["SERVER_ROOT"])
