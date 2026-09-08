@@ -54,7 +54,10 @@ export VLLM_NO_USAGE_STATS=1
 export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
 
-mkdir -p "${SERVER_ROOT}/runtime/${SLURM_JOB_ID}" "${HF_HOME}"
+INSTANCE_NAME="${INSTANCE_NAME:-}"
+[[ -z "${INSTANCE_NAME}" || "${INSTANCE_NAME}" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo "Invalid INSTANCE_NAME" >&2; exit 2; }
+export INSTANCE_NAME
+mkdir -p "${SERVER_ROOT}/runtime/${SLURM_JOB_ID}${INSTANCE_NAME:+/${INSTANCE_NAME}}" "${HF_HOME}"
 
 echo "Job ${SLURM_JOB_ID} on ${SLURM_NODELIST}"
 nvidia-smi --query-gpu=name,memory.total,driver_version \
@@ -130,7 +133,8 @@ done
 "${VENV_DIR}/bin/python" "${SERVER_ROOT}/scripts/verify_server.py" \
     --base-url "http://127.0.0.1:${PORT}/v1" \
     --model "${SERVED_MODEL_NAME}" \
-    --revision "${MODEL_REVISION}"
+    --revision "${MODEL_REVISION}" \
+    --mode "${SMOKE_MODE:-gpt-oss}"
 
 ADVERTISE_HOST="${ADVERTISE_HOST:-$(hostname -f 2>/dev/null || hostname)}"
 export ADVERTISE_HOST
@@ -170,6 +174,7 @@ path = (
     Path(os.environ["SERVER_ROOT"])
     / "runtime"
     / os.environ["SLURM_JOB_ID"]
+    / os.environ.get("INSTANCE_NAME", "")
     / "manifest.json"
 )
 path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")

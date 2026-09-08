@@ -31,6 +31,10 @@ class VerifyServerTests(unittest.TestCase):
             {"status": "ok"},
         )
 
+    def test_chat_only_payload_omits_reasoning(self) -> None:
+        payload = verify_server.chat_payload("llama33-70b", "prompt", reasoning_effort=None)
+        self.assertNotIn("reasoning_effort", payload)
+
     def test_chat_payload_uses_openai_compatible_transport(self) -> None:
         payload = verify_server.chat_payload("model", "prompt")
         self.assertEqual(payload["model"], "model")

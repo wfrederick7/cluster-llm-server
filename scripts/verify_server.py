@@ -97,7 +97,7 @@ def chat_payload(
     prompt: str,
     *,
     max_tokens: int = 2048,
-    reasoning_effort: str = "high",
+    reasoning_effort: str | None = "high",
 ) -> dict[str, Any]:
     return {
         "model": model,
@@ -108,7 +108,7 @@ def chat_payload(
         "seed": 123,
         "stream": False,
         "frequency_penalty": 0,
-        "reasoning_effort": reasoning_effort,
+        **({"reasoning_effort": reasoning_effort} if reasoning_effort else {}),
     }
 
 
@@ -144,9 +144,11 @@ def build_long_prompt(model: str, revision: str, target_tokens: int) -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--mode", choices=("gpt-oss", "chat"), default="gpt-oss")
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--model", required=True)
     parser.add_argument("--revision", default=os.getenv("MODEL_REVISION", ""))
+    parser.add_argument("--tokenizer-model", default=os.getenv("MODEL_ID", ""))
     parser.add_argument("--long-context-tokens", type=int, default=0)
     parser.add_argument("--timeout", type=int, default=600)
     return parser.parse_args()
@@ -180,6 +182,7 @@ def main() -> None:
         payload=chat_payload(
             args.model,
             'Return only this JSON object: {"status":"ok"}',
+            reasoning_effort='high' if args.mode == 'gpt-oss' else None,
         ),
         timeout=args.timeout,
     )
@@ -189,30 +192,31 @@ def main() -> None:
     if parsed.get("status") != "ok":
         raise RuntimeError("assistant JSON smoke test returned an unexpected value")
 
-    status, responses = request_json(
-        f"{base_url}/responses",
-        api_key=api_key,
-        payload={
-            "model": args.model,
-            "input": "Return exactly: ok",
-            "max_output_tokens": 512,
-        },
-        timeout=args.timeout,
-    )
-    if status != 200 or not responses.get("output"):
-        raise RuntimeError("Responses API smoke test failed")
+    if args.mode == "gpt-oss":
+        status, responses = request_json(
+            f"{base_url}/responses",
+            api_key=api_key,
+            payload={
+                "model": args.model,
+                "input": "Return exactly: ok",
+                "max_output_tokens": 512,
+            },
+            timeout=args.timeout,
+        )
+        if status != 200 or not responses.get("output"):
+            raise RuntimeError("Responses API smoke test failed")
 
     if args.long_context_tokens:
         if not args.revision:
             raise RuntimeError("--revision is required for the long-context test")
         prompt = build_long_prompt(
-            args.model, args.revision, int(args.long_context_tokens)
+            args.tokenizer_model or args.model, args.revision, int(args.long_context_tokens)
         )
         payload = chat_payload(
             args.model,
             prompt,
             max_tokens=512,
-            reasoning_effort="low",
+            reasoning_effort="low" if args.mode == "gpt-oss" else None,
         )
         status, chat = request_json(
             f"{base_url}/chat/completions",

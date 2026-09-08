@@ -134,3 +134,38 @@ enable FP8 KV cache or reduce the requested context length.
 - No fixed compute node, personal path, or default credential is stored.
 - The deployment is one tensor-parallel replica across eight H100s.
   Multi-replica serving and TensorRT-LLM remain deferred.
+
+## Three models on one node: 2 + 2 + 4 GPUs
+
+`slurm/serve_three.sbatch` allocates eight H100 80 GB GPUs and starts three
+exclusive Slurm steps: Llama-3.3-70B on two GPUs (port 8001), Med42-v2-70B on
+two (8002), and GPT-OSS-120B on four (8000). Each step sees only its assigned
+GPUs. Profiles pin model revisions and keep separate logs and manifests under
+`runtime/<job-id>/<profile>/manifest.json`. The original TP8 launcher remains
+available. The allocation stops if any server exits.
+
+Prerequisites: the existing environment and `server.env`, accepted access to
+Meta's gated Llama weights and an `HF_TOKEN` with access, sufficient shared
+cache space (allow at least 500 GB for all three uncached models), a Slurm configuration supporting GPU allocation per job step. Prefetch
+models before reserving the GPU node when possible. The three-model job requests
+512 GB host RAM; adapt partition/account/time to the cluster.
+
+```bash
+mkdir -p logs
+sbatch slurm/serve_three.sbatch
+```
+
+Check all three instance logs for `Server ready` and all three manifests before
+starting clients. Base URLs share the compute-node hostname but use the ports
+above; request model names are `llama33-70b`, `med42-v2-70b`, and
+`gpt-oss-120b-tp4`. Names are aliases; manifests retain actual checkpoints and
+revisions. The ordinary Llama/Med42 smoke test uses Chat Completions without
+GPT-OSS reasoning or Responses API requirements.
+
+Both generation profiles use 8,192 total context tokens, one concurrent
+sequence and unquantized model defaults. Proposed client output cap: 2,048
+with the same input evidence for both models. This is a deployment candidate,
+not a demonstrated fit: two-GPU 70B startup and near-limit requests must pass
+on the HPC. If memory is insufficient, do not silently quantize or truncate;
+use the four-GPU GPT-OSS plus one four-GPU generator arrangement sequentially.
+The GPT-OSS four-GPU profile also requires long-context load validation.
