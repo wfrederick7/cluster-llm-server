@@ -7,6 +7,32 @@ The default profile serves `openai/gpt-oss-120b` across eight H100 80 GB GPUs wi
 The server exposes both `/v1/chat/completions` and `/v1/responses`. It is meant
 for jobs on the private cluster network, not public internet access.
 
+## Llama 3.1 8B for discharge generation
+
+`slurm/serve_llama31_8b.sbatch` starts eight independent Llama-3.1-8B-Instruct
+replicas on eight H100 80 GB GPUs and one authenticated least-in-flight proxy.
+This profile supports non-streaming Chat Completions at `/v1/chat/completions`;
+it does not expose the Responses API. It uses the same external mode-600
+`server.env` secrets file and `.venv` as the other server profiles. The gated
+Llama model requires `HF_TOKEN` in that file.
+
+The profile pins the [model repository's published commit SHA](https://huggingface.co/api/models/meta-llama/Llama-3.1-8B-Instruct). To use another
+tested revision, set `MODEL_REVISION` to its 40-character SHA. Submit from the
+repository root:
+
+```bash
+cd /path/to/cluster-llm-server
+mkdir -p logs
+sbatch --export=ALL slurm/serve_llama31_8b.sbatch
+```
+
+The launcher checks that all eight GPUs are visible and have at most 2 GiB
+already used, prefetches the selected revision, starts replicas one at a time,
+and runs an authenticated smoke test. It writes a non-secret
+`runtime/<job-id>/manifest.json` containing the base URL and served model name.
+Use those values and `VLLM_API_KEY` from the external secrets file in the
+Discharge_summary generation jobs; no node address is baked into that repo.
+
 Status: the repository is locally tested, but the full install and serving path
 must be validated on the target GPU cluster.
 
