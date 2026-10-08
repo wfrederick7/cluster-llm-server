@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import re
+import json
+import os
+import sys
+import tempfile
 import subprocess
 import unittest
 from pathlib import Path
@@ -46,6 +50,48 @@ class RepositoryTests(unittest.TestCase):
         launcher = (ROOT / "slurm" / "serve.sbatch").read_text(encoding="utf-8")
         self.assertIn("SLURM_SUBMIT_DIR", launcher)
         self.assertNotIn('dirname "${BASH_SOURCE[0]}"', launcher)
+
+    def test_server_uses_selected_python_with_stale_console_shebang(self) -> None:
+        launcher = (ROOT / "slurm" / "serve.sbatch").read_text(encoding="utf-8")
+        start = launcher.index('"${VENV_DIR}/bin/python" "${VENV_DIR}/bin/vllm" serve')
+        end = launcher.index('SERVER_PID="$!"', start) + len('SERVER_PID="$!"')
+        command = launcher[start:end] + '\nwait "$SERVER_PID"\n'
+        with tempfile.TemporaryDirectory() as directory:
+            env_dir = Path(directory) / "selected-env"
+            binaries = env_dir / "bin"
+            binaries.mkdir(parents=True)
+            (binaries / "python").symlink_to(sys.executable)
+            console = binaries / "vllm"
+            console.write_text(
+                "#!/nonexistent-original-env/bin/python\n"
+                "import json, sys\n"
+                "print(json.dumps(sys.argv[1:]))\n",
+                encoding="utf-8",
+            )
+            console.chmod(0o755)
+            environment = {
+                **os.environ,
+                "VENV_DIR": str(env_dir),
+                "MODEL_ID": "synthetic-model",
+                "MODEL_REVISION": "synthetic-revision",
+                "SERVED_MODEL_NAME": "synthetic-served-name",
+                "PORT": "8000",
+                "TENSOR_PARALLEL_SIZE": "8",
+                "MAX_MODEL_LEN": "131072",
+                "MAX_NUM_SEQS": "8",
+                "MAX_NUM_BATCHED_TOKENS": "4096",
+                "GPU_MEMORY_UTILIZATION": "0.95",
+                "DTYPE": "auto",
+                "KV_CACHE_DTYPE": "auto",
+            }
+            result = subprocess.run(
+                ["bash", "-c", command], env=environment,
+                text=True, capture_output=True, check=True,
+            )
+            arguments = json.loads(result.stdout)
+            self.assertEqual(arguments[:2], ["serve", "synthetic-model"])
+            self.assertIn("--tensor-parallel-size", arguments)
+            self.assertIn("--enable-prefix-caching", arguments)
 
     def test_bootstrap_uses_stable_release_dependencies(self) -> None:
         requirements = (ROOT / "requirements.bootstrap.txt").read_text(

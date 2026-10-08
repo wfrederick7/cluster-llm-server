@@ -98,7 +98,8 @@ cleanup() {
 }
 trap cleanup EXIT TERM INT
 
-"${VENV_DIR}/bin/vllm" serve "${MODEL_ID}" \
+# Use the selected interpreter even if the console script retains an older path.
+"${VENV_DIR}/bin/python" "${VENV_DIR}/bin/vllm" serve "${MODEL_ID}" \
     --revision "${MODEL_REVISION}" \
     --served-model-name "${SERVED_MODEL_NAME}" \
     --host 0.0.0.0 \
