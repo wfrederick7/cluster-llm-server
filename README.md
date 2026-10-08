@@ -218,3 +218,83 @@ not a demonstrated fit: two-GPU 70B startup and near-limit requests must pass
 on the HPC. If memory is insufficient, do not silently quantize or truncate;
 use the four-GPU GPT-OSS plus one four-GPU generator arrangement sequentially.
 The GPT-OSS four-GPU profile also requires long-context load validation.
+
+## Gemma and MedGemma on one SP node: 4 + 4 GPUs
+
+`slurm/serve_gemma_medgemma.sbatch` starts the following pair on one node with
+eight H100 80 GB GPUs, using two exclusive four-GPU Slurm steps:
+
+| Profile / request model name | Hugging Face checkpoint | Port |
+| --- | --- | --- |
+| `gemma3-27b` | [google/gemma-3-27b-it](https://huggingface.co/google/gemma-3-27b-it) | 8003 |
+| `medgemma-27b-text` | [google/medgemma-27b-text-it](https://huggingface.co/google/medgemma-27b-text-it) | 8004 |
+
+The profiles pin exact checkpoint revisions. Both use BF16 weights without
+quantization, an 8,192-token total context limit, one concurrent sequence, and
+2,048 batched tokens, matching the existing generation pair's context and
+batching limits. Gemma's image inputs are disabled; MedGemma is the text-only
+27B checkpoint. The existing vLLM 0.10.2 environment supports both architectures
+([supported models](https://docs.vllm.ai/en/v0.10.2/models/supported_models.html)).
+Use an identical client output cap (initially 2,048 tokens) and input evidence
+for both generators. The context limit includes the prompt, chat template and
+output; check token counts rather than silently truncating evidence.
+
+Before starting, accept the Gemma and Health AI Developer Foundations terms on
+the two Hugging Face pages using the account associated with `HF_TOKEN`. Put
+that read token in the existing mode-600 external `server.env` file, alongside
+`VLLM_API_KEY` and `HF_HOME`. Allow at least 150 GB free shared cache space for
+the uncached pair; the job requests 256 GB host RAM. Prefetch on the login node
+before reserving GPUs when possible:
+
+```bash
+cd /path/to/cluster-llm-server
+source .venv/bin/activate
+set -a
+source ~/.config/cluster-llm-server/server.env
+set +a
+for profile in gemma3-27b medgemma-27b-text; do
+    (
+        set -a
+        source "profiles/${profile}.env"
+        set +a
+        python scripts/prefetch_model.py
+    )
+done
+```
+
+The startup helper loads the same cluster modules as the GPT-OSS helper and
+lets Slurm select an available node in `superpod`:
+
+```bash
+./scripts/start_gemma_medgemma.sh
+```
+
+To select a particular SP node, set `NODE`; partition, walltime, environment and
+module overrides work as for the GPT-OSS helper. Additional Slurm options are
+passed through:
+
+```bash
+NODE=sp-0004 WALLTIME=2-00:00:00 ./scripts/start_gemma_medgemma.sh --account=your-account
+```
+
+Alternatively, with the environment already configured, run
+`mkdir -p logs` followed by `sbatch --partition=superpod slurm/serve_gemma_medgemma.sbatch`.
+Both servers use the existing authenticated Chat Completions smoke test and
+write separate non-secret manifests to
+`runtime/<job-id>/<profile>/manifest.json`. Wait for `Server ready` in both
+instance logs before using their manifest URLs:
+`http://<allocated-host>:8003/v1` and `http://<allocated-host>:8004/v1`.
+An exited server stops the whole pair. This job serves only the two generators;
+use the separately deployed GPT-OSS endpoint for evaluation.
+
+Local tests validate orchestration and configuration, not model loading. Before
+running the study, verify each endpoint on the cluster, including a near-limit
+request with the same input/output budget. For example, source the secrets and
+the corresponding profile, then run this for each port and served model name:
+
+```bash
+python scripts/verify_server.py --mode chat \
+    --base-url "http://<allocated-host>:${PORT}/v1" \
+    --model "$SERVED_MODEL_NAME" --tokenizer-model "$MODEL_ID" \
+    --revision "$MODEL_REVISION" --long-context-tokens 7500 --timeout 3600
+```

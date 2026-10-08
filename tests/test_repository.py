@@ -53,9 +53,9 @@ class RepositoryTests(unittest.TestCase):
 
     def test_server_uses_selected_python_with_stale_console_shebang(self) -> None:
         launcher = (ROOT / "slurm" / "serve.sbatch").read_text(encoding="utf-8")
-        start = launcher.index('"${VENV_DIR}/bin/python" "${VENV_DIR}/bin/vllm" serve')
+        start = launcher.index('model_args=()')
         end = launcher.index('SERVER_PID="$!"', start) + len('SERVER_PID="$!"')
-        command = launcher[start:end] + '\nwait "$SERVER_PID"\n'
+        command = 'set -euo pipefail\n' + launcher[start:end] + '\nwait "$SERVER_PID"\n'
         with tempfile.TemporaryDirectory() as directory:
             env_dir = Path(directory) / "selected-env"
             binaries = env_dir / "bin"
@@ -92,6 +92,15 @@ class RepositoryTests(unittest.TestCase):
             self.assertEqual(arguments[:2], ["serve", "synthetic-model"])
             self.assertIn("--tensor-parallel-size", arguments)
             self.assertIn("--enable-prefix-caching", arguments)
+
+            environment["LIMIT_MM_PER_PROMPT"] = '{"image":0}'
+            result = subprocess.run(
+                ["bash", "-c", command], env=environment,
+                text=True, capture_output=True, check=True,
+            )
+            arguments = json.loads(result.stdout)
+            index = arguments.index("--limit-mm-per-prompt")
+            self.assertEqual(json.loads(arguments[index + 1]), {"image": 0})
 
     def test_bootstrap_uses_stable_release_dependencies(self) -> None:
         requirements = (ROOT / "requirements.bootstrap.txt").read_text(

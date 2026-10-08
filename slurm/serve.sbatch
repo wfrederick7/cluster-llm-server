@@ -99,6 +99,10 @@ cleanup() {
 trap cleanup EXIT TERM INT
 
 # Use the selected interpreter even if the console script retains an older path.
+model_args=()
+if [[ -n "${LIMIT_MM_PER_PROMPT:-}" ]]; then
+    model_args+=(--limit-mm-per-prompt "${LIMIT_MM_PER_PROMPT}")
+fi
 "${VENV_DIR}/bin/python" "${VENV_DIR}/bin/vllm" serve "${MODEL_ID}" \
     --revision "${MODEL_REVISION}" \
     --served-model-name "${SERVED_MODEL_NAME}" \
@@ -111,6 +115,7 @@ trap cleanup EXIT TERM INT
     --gpu-memory-utilization "${GPU_MEMORY_UTILIZATION}" \
     --dtype "${DTYPE}" \
     --kv-cache-dtype "${KV_CACHE_DTYPE}" \
+    ${model_args[@]+"${model_args[@]}"} \
     --enable-chunked-prefill \
     --enable-prefix-caching \
     --enforce-eager &
@@ -165,6 +170,7 @@ manifest = {
     "gpu_memory_utilization": float(os.environ["GPU_MEMORY_UTILIZATION"]),
     "dtype": os.environ["DTYPE"],
     "kv_cache_dtype": os.environ["KV_CACHE_DTYPE"],
+    "limit_mm_per_prompt": json.loads(os.environ.get("LIMIT_MM_PER_PROMPT") or "{}"),
     "python": platform.python_version(),
     "vllm": importlib.metadata.version("vllm"),
     "torch": torch.__version__,
