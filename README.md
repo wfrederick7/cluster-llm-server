@@ -90,7 +90,30 @@ QoS, and time limit.
 
 ## Start the server
 
-The Slurm output directory must exist before submission:
+On the module-based superpod cluster, use the startup helper from a cluster
+terminal. It loads `gcc/15.2.0` and `python/cpu/3.10.6`, clears conflicting
+Python/compiler paths, selects this checkout's `.venv`, creates the log directory,
+and submits GPT-OSS on eight GPUs on `sp-0003` for five days:
+
+```bash
+./scripts/start_gpt_oss.sh
+```
+
+The interpreter check runs without GPU detection; CUDA is checked inside the
+GPU job. Existing credentials remain in `~/.config/cluster-llm-server/server.env`.
+Override the scheduling settings or pass additional Slurm options as needed:
+
+```bash
+NODE=sp-0004 WALLTIME=2-00:00:00 ./scripts/start_gpt_oss.sh --account=your-account
+```
+
+`PARTITION`, `NODE` and `WALLTIME` control scheduling. `SERVER_GCC_MODULE` and
+`SERVER_PYTHON_MODULE` select modules; `SERVER_VENV_DIR` selects another installed
+server environment. Executing the helper sets the job environment without
+changing the calling terminal.
+
+For a cluster with its environment already configured, submit the launcher
+directly. The Slurm output directory must exist before submission:
 
 ```bash
 cd /path/to/cluster-llm-server
