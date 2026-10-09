@@ -61,6 +61,8 @@ class GemmaPairTests(unittest.TestCase):
             'import json, os, signal, sys, time\n'
             'from pathlib import Path\n'
             'name = os.environ["INSTANCE_NAME"]\n'
+            'print("Startup progress for " + name, flush=True)\n'
+            'print("Startup diagnostic for " + name, file=sys.stderr, flush=True)\n'
             'def stopped(*_):\n'
             '    Path(os.environ["STUB_ROOT"], name + ".stopped").touch()\n'
             '    sys.exit(0)\n'
@@ -110,13 +112,22 @@ class GemmaPairTests(unittest.TestCase):
                 stopped = self.root / "medgemma-27b-text.stopped"
                 stopped.unlink(missing_ok=True)
                 process = self.start_pair()
-                _, error = process.communicate(timeout=10)
+                output, error = process.communicate(timeout=10)
                 self.assertEqual(process.returncode, 1, error)
                 calls = self.calls()
                 self.assertEqual({call["name"] for call in calls},
                                  {"gemma3-27b", "medgemma-27b-text"})
                 self.assertEqual(len(calls), 2)
                 for call in calls:
+                    name = call["name"]
+                    self.assertIn(f"[{name}] Startup progress for {name}", output)
+                    self.assertIn(f"[{name}] Startup diagnostic for {name}", error)
+                    log_root = self.root / "runtime" / "123"
+                    self.assertEqual((log_root / f"{name}.out").read_text(),
+                                     f"Startup progress for {name}\n")
+                    self.assertEqual((log_root / f"{name}.err").read_text(),
+                                     f"Startup diagnostic for {name}\n")
+                    self.assertIn("--unbuffered", call["args"])
                     self.assertIn("--gpus-per-task=4", call["args"])
                     self.assertIn("--exclusive", call["args"])
                     self.assertIn("--nodes=1", call["args"])

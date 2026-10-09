@@ -279,6 +279,11 @@ NODE=sp-0004 WALLTIME=2-00:00:00 ./scripts/start_gemma_medgemma.sh --account=you
 
 Alternatively, with the environment already configured, run
 `mkdir -p logs` followed by `sbatch --partition=superpod slurm/serve_gemma_medgemma.sbatch`.
+The main Slurm `.out` and `.err` files show live model output, prefixed with
+`[gemma3-27b]` or `[medgemma-27b-text]`. Unprefixed per-model copies remain in
+`runtime/<job-id>/<profile>.out` and `.err`. Startup messages appear immediately;
+an already running job keeps its original logging behavior.
+
 Both servers use the existing authenticated Chat Completions smoke test and
 write separate non-secret manifests to
 `runtime/<job-id>/<profile>/manifest.json`. Wait for `Server ready` in both

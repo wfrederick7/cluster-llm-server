@@ -14,6 +14,8 @@ set -euo pipefail
 SERVER_ROOT="${SERVER_ROOT:-${SLURM_SUBMIT_DIR:?Submit from the server repository}}"
 export SERVER_ROOT
 mkdir -p "${SERVER_ROOT}/runtime/${SLURM_JOB_ID}"
+echo "Starting Gemma/MedGemma job ${SLURM_JOB_ID} on ${SLURM_NODELIST:-unknown node}"
+echo "Model logs are mirrored here and saved under ${SERVER_ROOT}/runtime/${SLURM_JOB_ID}/"
 pids=()
 cleanup() {
     trap - EXIT TERM INT
@@ -25,12 +27,18 @@ trap 'exit 143' TERM
 trap 'exit 130' INT
 start() {
     local name="$1"
+    local log_root="${SERVER_ROOT}/runtime/${SLURM_JOB_ID}/${name}"
+    echo "Starting ${name} with four GPUs"
     INSTANCE_NAME="$name" PROFILE="${SERVER_ROOT}/profiles/${name}.env" \
-      srun --exclusive --nodes=1 --ntasks=1 --cpus-per-task=8 \
+      srun --unbuffered --exclusive --nodes=1 --ntasks=1 --cpus-per-task=8 \
       --gpus-per-task=4 --gpu-bind=closest --mem=120G \
-      --output="${SERVER_ROOT}/runtime/${SLURM_JOB_ID}/${name}.out" \
-      --error="${SERVER_ROOT}/runtime/${SLURM_JOB_ID}/${name}.err" \
-      bash "${SERVER_ROOT}/slurm/serve.sbatch" &
+      bash "${SERVER_ROOT}/slurm/serve.sbatch" \
+      > >(tee "${log_root}.out" | while IFS= read -r line || [[ -n "$line" ]]; do
+          printf '[%s] %s\n' "$name" "$line"
+      done) \
+      2> >(tee "${log_root}.err" | while IFS= read -r line || [[ -n "$line" ]]; do
+          printf '[%s] %s\n' "$name" "$line" >&2
+      done) &
     pids+=("$!")
 }
 start gemma3-27b
